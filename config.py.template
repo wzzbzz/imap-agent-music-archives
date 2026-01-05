@@ -1,0 +1,16 @@
+# Email Configuration Template
+# Copy this file to config.py and fill in your actual credentials
+# NEVER commit config.py with real credentials to git!
+
+# IMAP Settings
+IMAP_SERVER = 'imap.gmail.com'
+EMAIL_USER = 'your-email@gmail.com'
+EMAIL_PASS = 'your-app-password-here'
+
+# Default sender (can be overridden in workflows)
+SENDER_EMAIL = 'sender@example.com'
+EMAIL_SUBJECT = "Your Subject"
+
+# API Keys (if using LLM features)
+GEMINI_KEY = 'your-gemini-key-here'
+OPENAI_KEY = 'your-openai-key-here'

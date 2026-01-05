@@ -1,0 +1,251 @@
+"""
+Workflow Configuration System for Email Archiving
+
+Each workflow defines:
+- IMAP search criteria
+- How to extract release numbers from subjects
+- Where to save files
+- What processors to run on attachments
+- How to build metadata
+"""
+
+from dataclasses import dataclass, field
+from typing import List, Dict, Callable, Optional
+import re
+
+
+@dataclass
+class AttachmentProcessor:
+    """Defines how to handle a specific type of attachment"""
+    name: str
+    file_patterns: List[str]  # e.g., ["*.mp3", "*.m4a"]
+    handler: str  # Reference to handler function name
+    options: Dict = field(default_factory=dict)
+
+
+@dataclass
+class WorkflowConfig:
+    """Complete configuration for an email archiving workflow"""
+    
+    # Identity
+    name: str
+    description: str
+    
+    # Storage
+    base_dir: str
+    folder_pattern: str  # e.g., "Issue_{number}", "Volume_{number}"
+    
+    # IMAP Search Criteria
+    imap_folder: str = "[Gmail]/All Mail"
+    sender: Optional[str] = None
+    subject_filter: Optional[str] = None
+    before_date: Optional[str] = None
+    after_date: Optional[str] = None
+    require_attachments: bool = True
+    exclude_patterns: tuple = field(default_factory=tuple)  # e.g., ("re:", "fwd:")
+    
+    # Release Number Extraction
+    release_number_pattern: str = r'(?:Issue|#|Volume)\s*(\d+)'
+    release_number_fallback: str = r'(\d+)'
+    release_indicator: str = "Issue"  # Used in folder names
+    
+    # Attachment Processing Pipeline
+    attachment_processors: List[AttachmentProcessor] = field(default_factory=list)
+    
+    # Audio Processing
+    normalize_audio: bool = True
+    audio_target_lufs: float = -16.0
+    audio_bitrate: str = "320k"
+    audio_output_format: str = "original"  # "original", "mp3", "ogg", "m4a", "flac"
+    
+    # Metadata Options
+    merge_fragments: bool = False  # For multi-part emails
+    extract_lyrics_from_docx: bool = True
+    generate_metadata: bool = True  # Generate metadata.json using LLM
+    metadata_llm_provider: str = "gemini"  # "gemini", "openai", or "anthropic"
+    metadata_schema: Optional[Dict] = None  # Custom schema (uses default if None)
+    
+    # Registry
+    registry_filename: str = "downloaded_uids.json"
+    processed_filename: str = "processed.json"
+    
+    def get_folder_name(self, release_number: str) -> str:
+        """Generate folder name for a given release number"""
+        return self.folder_pattern.format(number=release_number)
+    
+    def extract_release_number(self, subject: str) -> str:
+        """Extract release number from email subject"""
+        match = re.search(self.release_number_pattern, subject, re.IGNORECASE)
+        if not match and self.release_number_fallback:
+            match = re.search(self.release_number_fallback, subject)
+        return match.group(1) if match else "unknown"
+    
+    def to_imap_args(self) -> Dict:
+        """Convert workflow config to IMAP fetch arguments"""
+        args = {
+            "folder": self.imap_folder,
+            "attachments": self.require_attachments,
+            "exclude": self.exclude_patterns,
+            "base_dir": self.base_dir,
+            "release_indicator": self.release_indicator,
+        }
+        
+        if self.sender:
+            args["sender"] = self.sender
+        if self.subject_filter:
+            args["subject"] = self.subject_filter
+        if self.before_date:
+            args["before"] = self.before_date
+        if self.after_date:
+            args["after"] = self.after_date
+            
+        return args
+
+
+# ============================================================================
+# PREDEFINED WORKFLOWS
+# ============================================================================
+
+SONIC_TWIST_WORKFLOW = WorkflowConfig(
+    name="sonic_twist",
+    description="Sonic Twist newsletter archive with audio tracks and lyrics",
+    base_dir="sonic_twist_archives",
+    folder_pattern="Issue_{number}",
+    
+    sender="alvyhall@aol.com",
+    subject_filter="Sonic Twist",
+    before_date="12/31/25",
+    
+    release_number_pattern=r'(?:Issue|#)\s*(\d+)',
+    release_indicator="Issue",
+    
+    attachment_processors=[
+        AttachmentProcessor(
+            name="zip_extractor",
+            file_patterns=["*.zip"],
+            handler="process_zip_attachment",
+            #options={"extract_to": "audio"}
+        ),
+        AttachmentProcessor(
+            name="audio_normalizer",
+            file_patterns=["*.mp3", "*.m4a", "*.wav"],
+            handler="normalize_audio",
+            options={"target_lufs": -16.0, "bitrate": "320k"}
+        ),
+        AttachmentProcessor(
+            name="image_saver",
+            file_patterns=["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
+            handler="save_image",
+            options={}
+        ),
+        AttachmentProcessor(
+            name="lyrics_extractor",
+            file_patterns=["*.docx"],
+            handler="extract_docx_text",
+            options={"field_name": "lyrics"}
+        ),
+    ],
+    
+    normalize_audio=True,
+    audio_output_format="mp3",  # Convert all to MP3
+    extract_lyrics_from_docx=True,
+    merge_fragments=True,
+)
+
+
+OFF_THE_GRID_WORKFLOW = WorkflowConfig(
+    name="off_the_grid",
+    description="Off the Grid radio show archives",
+    base_dir="off_the_grid_archives",
+    folder_pattern="Volume_{number}",
+    
+    sender="alvyhall@aol.com",
+    subject_filter="Off the Grid",
+    
+    release_number_pattern=r'Volume\s*(\d+)',
+    release_indicator="Volume",
+    
+    attachment_processors=[
+        AttachmentProcessor(
+            name="zip_extractor",
+            file_patterns=["*.zip"],
+            handler="process_zip_attachment",
+            #options={"extract_to": "audio"}
+        ),
+        AttachmentProcessor(
+            name="audio_normalizer",
+            file_patterns=["*.mp3", "*.m4a", "*.wav"],
+            handler="normalize_audio",
+            options={"target_lufs": -16.0, "bitrate": "320k"}
+        ),
+        AttachmentProcessor(
+            name="image_saver",
+            file_patterns=["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
+            handler="save_image",
+            options={}
+        ),
+    ],
+    
+    normalize_audio=True,
+    audio_output_format="mp3",  # Convert all to MP3
+    merge_fragments=False,
+)
+
+
+EVEN_MORE_CAKE_WORKFLOW = WorkflowConfig(
+    name="even_more_cake",
+    description="Even More Cake radio show archives",
+    base_dir="even_more_cake_archives",
+    folder_pattern="Volume_{number}",
+    
+    sender="alvyhall@aol.com",
+    subject_filter="Sonic Twist",  # Note: Uses same subject filter
+    
+    release_number_pattern=r'Volume\s*(\d+)',
+    release_indicator="Volume",
+    
+    attachment_processors=[
+        AttachmentProcessor(
+            name="zip_extractor",
+            file_patterns=["*.zip"],
+            handler="process_zip_attachment",
+            #options={"extract_to": "audio"}
+        ),
+        AttachmentProcessor(
+            name="audio_normalizer",
+            file_patterns=["*.mp3", "*.m4a", "*.wav"],
+            handler="normalize_audio",
+            options={"target_lufs": -16.0, "bitrate": "320k"}
+        ),
+        AttachmentProcessor(
+            name="image_saver",
+            file_patterns=["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
+            handler="save_image",
+            options={}
+        ),
+    ],
+    
+    normalize_audio=True,
+    audio_output_format="mp3",  # Convert all to MP3
+    merge_fragments=True,  # This workflow needs fragment merging
+)
+
+
+# Workflow Registry
+WORKFLOWS = {
+    "sonic_twist": SONIC_TWIST_WORKFLOW,
+    "off_the_grid": OFF_THE_GRID_WORKFLOW,
+    "even_more_cake": EVEN_MORE_CAKE_WORKFLOW,
+}
+
+
+def get_workflow(name: str) -> WorkflowConfig:
+    """Get a workflow configuration by name"""
+    if name not in WORKFLOWS:
+        raise ValueError(f"Unknown workflow: {name}. Available: {list(WORKFLOWS.keys())}")
+    return WORKFLOWS[name]
+
+
+def list_workflows() -> List[str]:
+    """List all available workflow names"""
+    return list(WORKFLOWS.keys())
