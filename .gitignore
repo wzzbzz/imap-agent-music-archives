@@ -44,3 +44,5 @@ config.py
 
 # Zip files
 *.zip
+
+archives

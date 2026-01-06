@@ -5,29 +5,30 @@ Each manifest lists all releases in that collection.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Dict, List
 
 # Base path for archives
-BASE_PATH = Path("/Users/jamespwilliams/Projects/python/email_archiving")
+BASE_PATH = Path("/Users/jamespwilliams/Ampelos/greenhouse/email_archiving")
 
 # Collection configurations
 COLLECTIONS = [
     {
         "id": "sonic_twist",
-        "folder": "sonic_twist_archives",
+        "folder": "archives/sonic_twist",
         "release_pattern": "Issue_",
         "release_type": "Issue"
     },
     {
         "id": "even_more_cake",
-        "folder": "even_more_cake_archives",
+        "folder": "archives/even_more_cake",
         "release_pattern": "Volume_",
         "release_type": "Volume"
     },
     {
         "id": "off_the_grid",
-        "folder": "off_the_grid_archives",
+        "folder": "archives/off_the_grid",
         "release_pattern": "Volume_",
         "release_type": "Volume"
     }
@@ -69,10 +70,13 @@ def generate_collection_manifest(collection: Dict) -> Dict:
         
         release_num = metadata.get('issue_number') or metadata.get('release_number')
         release_image = metadata.get('issue_image') or metadata.get('release_image')
+
+        # ensure that release_image is in format ()
         
         # Build full path for release image (similar to audio files)
         if release_image:
-            release_image = f"{collection['folder']}/{release_folder.name}/{release_image}"
+            release_image = re.sub("images/","",release_image)
+            release_image = f"{collection['folder']}/{release_folder.name}/images/{release_image}"
         
         tracks = metadata.get('tracks', [])
         
@@ -110,7 +114,10 @@ def main():
         if not manifest:
             continue
         
-        collection_dir = BASE_PATH / "archival-radio" / "public" / "data" / collection["id"]
+        collection_dir = BASE_PATH / collection["folder"]
+
+        print(collection_dir)
+
         collection_dir.mkdir(parents=True, exist_ok=True)
         
         manifest_path = collection_dir / "manifest.json"

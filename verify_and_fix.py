@@ -102,6 +102,7 @@ def check_release_audio(release_dir: Path) -> Dict:
         'has_audio_dir': False,
         'tracks': [],
         'missing_count': 0,
+        'missing_duration_count': 0,
         'total_tracks': 0,
         'uids': None,
         'message-id': None,
@@ -164,12 +165,16 @@ def check_release_audio(release_dir: Path) -> Dict:
             'title': track.get('title', 'Unknown'),
             'audio_file': audio_file,
             'exists': exists,
+            'has_duration': 'duration' in track and track['duration'] is not None,
         }
         
         result['tracks'].append(track_info)
         
         if not exists:
             result['missing_count'] += 1
+        
+        if not track_info['has_duration']:
+            result['missing_duration_count'] += 1
     
     return result
 
@@ -198,31 +203,48 @@ def scan_archives_interactive(base_path: str = None, auto_fix: bool = False):
             
             # Print status
             if result['has_metadata']:
+                issues = []
                 if result['missing_count'] > 0:
-                    print(f"   ⚠️  {result['release_name']}: {result['missing_count']}/{result['total_tracks']} files missing")
+                    issues.append(f"{result['missing_count']}/{result['total_tracks']} files missing")
+                if result['missing_duration_count'] > 0:
+                    issues.append(f"{result['missing_duration_count']}/{result['total_tracks']} durations missing")
+                
+                if issues:
+                    print(f"   ⚠️  {result['release_name']}: {', '.join(issues)}")
                     issues_found.append((archive.name, result))
                 else:
-                    print(f"   ✅ {result['release_name']}: All files present")
+                    print(f"   ✅ {result['release_name']}: All files present with durations")
     
     # Summary
     print(f"\n{'='*80}")
-    print(f"Found {len(issues_found)} releases with missing files")
+    print(f"Found {len(issues_found)} releases with missing files or durations")
     print(f"{'='*80}\n")
     
     if not issues_found:
-        print("✅ All audio files are present!")
+        print("✅ All audio files are present with durations!")
         return
     
     # Offer to fix issues
     for archive_name, result in issues_found:
         print(f"\n📦 {result['release_name']} ({archive_name})")
-        print(f"   Missing {result['missing_count']} of {result['total_tracks']} files:")
         
-        missing_tracks = [t for t in result['tracks'] if not t['exists']]
-        for track in missing_tracks[:3]:  # Show first 3
-            print(f"   - Track {track['track_num']}: {track['title']} ({track['audio_file']})")
-        if len(missing_tracks) > 3:
-            print(f"   ... and {len(missing_tracks) - 3} more")
+        # Report missing files
+        if result['missing_count'] > 0:
+            print(f"   Missing {result['missing_count']} of {result['total_tracks']} files:")
+            missing_tracks = [t for t in result['tracks'] if not t['exists']]
+            for track in missing_tracks[:3]:  # Show first 3
+                print(f"   - Track {track['track_num']}: {track['title']} ({track['audio_file']})")
+            if len(missing_tracks) > 3:
+                print(f"   ... and {len(missing_tracks) - 3} more")
+        
+        # Report missing durations
+        if result['missing_duration_count'] > 0:
+            print(f"   Missing durations for {result['missing_duration_count']} of {result['total_tracks']} tracks:")
+            missing_durations = [t for t in result['tracks'] if not t['has_duration']]
+            for track in missing_durations[:3]:  # Show first 3
+                print(f"   - Track {track['track_num']}: {track['title']}")
+            if len(missing_durations) > 3:
+                print(f"   ... and {len(missing_durations) - 3} more")
         
         # Check if we have UIDs to reprocess
         if not result['has_raw_json']:

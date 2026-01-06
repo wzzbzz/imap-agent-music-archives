@@ -150,6 +150,8 @@ IMPORTANT NOTES:
 - Numbers in filenames do NOT indicate track order - use the order from the message body
 - Use the "slugified" filename from attachments (the processed version)
 - Escape all special characters properly in JSON
+- the FIRST image is the release image.
+- all subsequent images should be assumed to be the track images in order.
 
 SUBJECT: {raw_data.get('subject', 'Unknown')}
 

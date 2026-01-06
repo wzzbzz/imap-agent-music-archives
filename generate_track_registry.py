@@ -10,25 +10,25 @@ from pathlib import Path
 from typing import Dict, List
 
 # Base path for archives
-BASE_PATH = Path("/Users/jamespwilliams/Projects/python/email_archiving")
+BASE_PATH = Path("/Users/jamespwilliams/Ampelos/greenhouse/email_archiving")
 
 # Collection configurations
 COLLECTIONS = [
     {
         "id": "sonic_twist",
-        "folder": "sonic_twist_archives",
+        "folder": "archives/sonic_twist",
         "release_pattern": "Issue_",
         "release_type": "Issue"
     },
     {
         "id": "even_more_cake",
-        "folder": "even_more_cake_archives",
+        "folder": "archives/even_more_cake",
         "release_pattern": "Volume_",
         "release_type": "Volume"
     },
     {
         "id": "off_the_grid",
-        "folder": "off_the_grid_archives",
+        "folder": "archives/off_the_grid",
         "release_pattern": "Volume_",
         "release_type": "Volume"
     }
@@ -88,6 +88,7 @@ def scan_collection(collection: Dict) -> Dict[str, Dict]:
         # Process each track
         for track in metadata.get('tracks', []):
             audio_file = track.get('audio_file')
+            print(audio_file)
             
             if not audio_file:
                 continue
@@ -152,7 +153,7 @@ def main():
     }
     
     # Write to archival-radio public folder
-    output_path = BASE_PATH / "archival-radio" / "public" / "data" / "tracks.json"
+    output_path = BASE_PATH / "archives" / "tracks.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, 'w', encoding='utf-8') as f:

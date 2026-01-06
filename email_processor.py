@@ -25,11 +25,60 @@ class EmailProcessor:
         self.base_dir = Path(workflow.base_dir)
         self.base_dir.mkdir(exist_ok=True)
         self.registry_path = self.base_dir / workflow.registry_filename
+    
+    def _get_latest_archived_date(self) -> Optional[str]:
+        """Find the most recent email date from existing raw.json files"""
+        from datetime import datetime
+        
+        if not self.base_dir.exists():
+            return None
+        
+        latest_date = None
+        latest_datetime = None
+        
+        # Scan all subdirectories for raw.json files
+        for raw_json_path in self.base_dir.rglob("raw.json"):
+            try:
+                with open(raw_json_path, 'r') as f:
+                    data = json.load(f)
+                    date_str = data.get('date')
+                    
+                    if date_str:
+                        # Handle both single date and list of dates
+                        if isinstance(date_str, list):
+                            date_str = date_str[0] if date_str else None
+                        
+                        if date_str:
+                            # Parse the date string
+                            email_date = datetime.fromisoformat(str(date_str).replace('Z', '+00:00'))
+                            
+                            if latest_datetime is None or email_date > latest_datetime:
+                                latest_datetime = email_date
+                                # Format as MM/DD/YY for Gmail search
+                                latest_date = email_date.strftime("%m/%d/%y")
+            
+            except Exception as e:
+                print(f"⚠️  Could not read date from {raw_json_path}: {e}")
+                continue
+        
+        return latest_date
         
     def process_all_emails(self, force: bool = False):
         """Fetch and process all emails matching workflow criteria"""
         print(f"🚀 Starting workflow: {self.workflow.name}")
         print(f"📂 Base directory: {self.base_dir}")
+        
+        # Auto-detect resume point if no after_date is set
+        if not self.workflow.after_date:
+            latest_date = self._get_latest_archived_date()
+            if latest_date:
+                print(f"📅 Found latest archived email from {latest_date}")
+                print(f"🔍 Fetching only emails newer than this date...")
+                self.workflow.after_date = latest_date
+            else:
+                print(f"📭 No existing archives found - fetching all emails")
+        else:
+            print(f"📅 Using configured after_date: {self.workflow.after_date}")
         
         imap_args = self.workflow.to_imap_args()
         
@@ -105,7 +154,7 @@ class EmailProcessor:
         # Generate structured metadata using LLM if enabled
         if self.workflow.generate_metadata:
             self._generate_llm_metadata(issue_dir)
-        
+                    
         print(f"✅ {self.workflow.release_indicator} {release_number} complete!")
     
     def _process_attachment(self, att, issue_dir: Path, extracted_text: Dict) -> List[Dict]:
@@ -234,6 +283,8 @@ class EmailProcessor:
             
             if success:
                 print(f"✅ Metadata generation complete")
+                # Add track durations after LLM generation
+                self._add_track_durations(issue_dir)
             else:
                 print(f"⚠️  Metadata generation failed (raw.json still available)")
                 
@@ -242,6 +293,54 @@ class EmailProcessor:
         except Exception as e:
             print(f"⚠️  Error generating metadata: {e}")
             print(f"   Raw data is still available in raw.json")
+    
+    def _add_track_durations(self, issue_dir: Path):
+        """Add duration field to tracks in metadata.json by reading actual audio files"""
+        try:
+            from mutagen.mp3 import MP3
+            
+            metadata_path = issue_dir / "metadata.json"
+            if not metadata_path.exists():
+                return
+            
+            print(f"🎵 Adding track durations...")
+            
+            with open(metadata_path, 'r') as f:
+                data = json.load(f)
+            
+            updated = False
+            for track in data.get('tracks', []):
+                audio_filename = track.get('audio_file')
+                if not audio_filename:
+                    continue
+                
+                # Try audio directory first, then root
+                audio_path = issue_dir / "audio" / audio_filename
+                if not audio_path.exists():
+                    audio_path = issue_dir / audio_filename
+                
+                if audio_path.exists():
+                    try:
+                        audio = MP3(str(audio_path))
+                        duration = int(audio.info.length)
+                        track['duration'] = duration
+                        print(f"  ✓ {track.get('title', audio_filename)}: {duration}s")
+                        updated = True
+                    except Exception as e:
+                        print(f"  ⚠️  Could not read duration for {audio_filename}: {e}")
+                else:
+                    print(f"  ⚠️  Audio file not found: {audio_filename}")
+            
+            if updated:
+                with open(metadata_path, 'w') as f:
+                    json.dump(data, f, indent=4)
+                print(f"✅ Track durations added")
+            
+        except ImportError:
+            print(f"⚠️  mutagen not installed - skipping duration calculation")
+            print(f"   Install with: pip install mutagen")
+        except Exception as e:
+            print(f"⚠️  Error adding durations: {e}")
     
     def _is_already_processed(self, uid) -> bool:
         """Check if email UID has been processed"""

@@ -109,12 +109,12 @@ class WorkflowConfig:
 SONIC_TWIST_WORKFLOW = WorkflowConfig(
     name="sonic_twist",
     description="Sonic Twist newsletter archive with audio tracks and lyrics",
-    base_dir="sonic_twist_archives",
+    base_dir="archives/sonic_twist",
     folder_pattern="Issue_{number}",
     
     sender="alvyhall@aol.com",
     subject_filter="Sonic Twist",
-    before_date="12/31/25",
+    # before_date removed - will auto-resume from latest archived email
     
     release_number_pattern=r'(?:Issue|#)\s*(\d+)',
     release_indicator="Issue",
@@ -156,7 +156,7 @@ SONIC_TWIST_WORKFLOW = WorkflowConfig(
 OFF_THE_GRID_WORKFLOW = WorkflowConfig(
     name="off_the_grid",
     description="Off the Grid radio show archives",
-    base_dir="off_the_grid_archives",
+    base_dir="archives/off_the_grid",
     folder_pattern="Volume_{number}",
     
     sender="alvyhall@aol.com",
@@ -195,7 +195,7 @@ OFF_THE_GRID_WORKFLOW = WorkflowConfig(
 EVEN_MORE_CAKE_WORKFLOW = WorkflowConfig(
     name="even_more_cake",
     description="Even More Cake radio show archives",
-    base_dir="even_more_cake_archives",
+    base_dir="archives/even_more_cake",
     folder_pattern="Volume_{number}",
     
     sender="alvyhall@aol.com",
