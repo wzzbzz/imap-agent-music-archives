@@ -209,3 +209,6 @@ For Gmail users, use an [App Password](https://support.google.com/accounts/answe
 ## Contributing
 
 [Add contribution guidelines here]
+
+
+ISSUES FOR NEXT ISSUE - Ensure that processed emails are omitted from the IMAP query

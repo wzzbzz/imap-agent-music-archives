@@ -1,4 +1,5 @@
 imap-tools>=1.0.0
 python-docx>=0.8.11
-ffmpeg-normalize>=1.24.0
+ffmpeg-normalize>=1.15.0
 mutagen>=1.45.0
+dataclasses>=0.6;python_version<"3.7"
