@@ -143,3 +143,19 @@ def mark_as_downloaded(uid, registry_path="downloaded_uids.json"):
         processed_uids.append(str(uid))
         with open(registry_path, "w") as f:
             json.dump(processed_uids, f)
+
+def remove_from_downloaded(uid, registry_path="downloaded_uids.json"):
+    """Remove a UID from the processed registry"""
+    if not os.path.exists(registry_path):
+        return False
+    
+    with open(registry_path, "r") as f:
+        processed_uids = json.load(f)
+    
+    uid_str = str(uid)
+    if uid_str in processed_uids:
+        processed_uids.remove(uid_str)
+        with open(registry_path, "w") as f:
+            json.dump(processed_uids, f)
+        return True
+    return False

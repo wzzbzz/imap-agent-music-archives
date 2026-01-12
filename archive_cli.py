@@ -9,6 +9,7 @@ from pathlib import Path
 
 from workflows import list_workflows, get_workflow, WORKFLOWS
 from email_processor import EmailProcessor, process_workflow
+from utils import remove_from_downloaded
 
 
 def cmd_list_workflows(args):
@@ -141,6 +142,22 @@ def cmd_check_status(args):
         sys.exit(1)
 
 
+def cmd_remove_uid(args):
+    """Remove a UID from the processed registry"""
+    try:
+        workflow = get_workflow(args.workflow)
+        registry_path = Path(workflow.base_dir) / workflow.registry_filename
+        
+        if remove_from_downloaded(args.uid, str(registry_path)):
+            print(f"✅ Removed UID {args.uid} from {workflow.name} registry")
+        else:
+            print(f"⚠️  UID {args.uid} not found in {workflow.name} registry")
+            
+    except ValueError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Email Archiving System - Process emails with configurable workflows"
@@ -175,6 +192,12 @@ def main():
     status_parser = subparsers.add_parser("status", help="Check processing status")
     status_parser.add_argument("workflow", help="Workflow name")
     status_parser.set_defaults(func=cmd_check_status)
+    
+    # Remove UID from processed list
+    remove_parser = subparsers.add_parser("remove-uid", help="Remove UID from processed registry")
+    remove_parser.add_argument("workflow", help="Workflow name")
+    remove_parser.add_argument("uid", help="Email UID to remove")
+    remove_parser.set_defaults(func=cmd_remove_uid)
     
     args = parser.parse_args()
     
