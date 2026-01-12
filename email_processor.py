@@ -49,8 +49,9 @@ class EmailProcessor:
                             date_str = date_str[0] if date_str else None
                         
                         if date_str:
-                            # Parse the date string
-                            email_date = datetime.fromisoformat(str(date_str).replace('Z', '+00:00'))
+                            # Parse the date string (Python 3.6 compatible)
+                            from dateutil import parser
+                            email_date = parser.isoparse(str(date_str))
                             
                             if latest_datetime is None or email_date > latest_datetime:
                                 latest_datetime = email_date
