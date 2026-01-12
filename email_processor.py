@@ -54,8 +54,8 @@ class EmailProcessor:
                             
                             if latest_datetime is None or email_date > latest_datetime:
                                 latest_datetime = email_date
-                                # Format as MM/DD/YY for Gmail search
-                                latest_date = email_date.strftime("%m/%d/%y")
+                                # Format as YYYY/MM/DD for Gmail search (4-digit year required)
+                                latest_date = email_date.strftime("%Y/%m/%d")
             
             except Exception as e:
                 print(f"⚠️  Could not read date from {raw_json_path}: {e}")
