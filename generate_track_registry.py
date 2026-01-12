@@ -9,8 +9,8 @@ import os
 from pathlib import Path
 from typing import Dict, List
 
-# Base path for archives
-BASE_PATH = Path("/Users/jamespwilliams/Ampelos/greenhouse/email_archiving")
+# Base path for archives - defaults to script directory
+BASE_PATH = Path(__file__).parent.resolve()
 
 # Collection configurations
 COLLECTIONS = [
@@ -52,13 +52,13 @@ def generate_track_id(audio_file: str, collection_id: str) -> str:
     return f"{collection_id}_{track_name}"
 
 
-def scan_collection(collection: Dict) -> Dict[str, Dict]:
+def scan_collection(collection: Dict, base_path: Path = BASE_PATH) -> Dict[str, Dict]:
     """
     Scan a collection folder and extract all track metadata.
     Returns dict of track_id -> track_data
     """
     tracks = {}
-    collection_path = BASE_PATH / collection["folder"]
+    collection_path = base_path / collection["folder"]
     
     if not collection_path.exists():
         print(f"⚠️  Collection not found: {collection_path}")
@@ -133,13 +133,27 @@ def scan_collection(collection: Dict) -> Dict[str, Dict]:
 
 def main():
     """Generate the master track registry."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Generate master track registry")
+    parser.add_argument(
+        '--base-path',
+        type=Path,
+        default=BASE_PATH,
+        help=f"Base path for archives (default: script directory)"
+    )
+    args = parser.parse_args()
+    
+    base_path = args.base_path
+    
     print("🎵 Generating Track Registry...")
+    print(f"📍 Base path: {base_path}")
     
     all_tracks = {}
     
     # Scan each collection
     for collection in COLLECTIONS:
-        collection_tracks = scan_collection(collection)
+        collection_tracks = scan_collection(collection, base_path)
         all_tracks.update(collection_tracks)
     
     # Create output structure
@@ -153,7 +167,7 @@ def main():
     }
     
     # Write to archival-radio public folder
-    output_path = BASE_PATH / "archives" / "tracks.json"
+    output_path = base_path / "archives" / "tracks.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, 'w', encoding='utf-8') as f:
