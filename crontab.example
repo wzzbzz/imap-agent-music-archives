@@ -1,0 +1,19 @@
+# Email Archiving Crontab
+# Add this to your crontab with: crontab -e
+#
+# NOTE: Replace /home/jackiepuppet/email_archiving with your actual path
+
+# Run sonic_twist workflow every hour at :05
+5 * * * * /home/jackiepuppet/email_archiving/run_workflow.sh sonic_twist
+
+# Run even_more_cake workflow every hour at :20
+20 * * * * /home/jackiepuppet/email_archiving/run_workflow.sh even_more_cake
+
+# Run off_the_grid workflow every hour at :35
+35 * * * * /home/jackiepuppet/email_archiving/run_workflow.sh off_the_grid
+
+# Generate manifests and track registry every hour at :50
+50 * * * * /home/jackiepuppet/email_archiving/run_manifests.sh
+
+# Log rotation (optional) - delete logs older than 30 days, runs daily at 2am
+0 2 * * * find /home/jackiepuppet/email_archiving/logs -name "*.log" -mtime +30 -delete
