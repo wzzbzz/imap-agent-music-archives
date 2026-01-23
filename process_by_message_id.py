@@ -105,6 +105,10 @@ if __name__ == "__main__":
     )
     
     args = parser.parse_args()
+
+    if not args.message_id or not args.message_id.strip():
+        print("❌ Error: message_id cannot be empty")
+        sys.exit(1)
     
     success = process_by_message_id(args.message_id, args.workflow, args.track_number)
     sys.exit(0 if success else 1)
