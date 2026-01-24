@@ -291,10 +291,6 @@ MIXED_NUTS_WORKFLOW = WorkflowConfig(
     
     normalize_audio=True,
     audio_output_format="mp3",
-    
-    # Single release mode - all tracks go into one growing release
-    single_release_mode=True,
-    single_release_name="Mixed_Nuts",
     extract_lyrics_from_docx=True,
     merge_fragments=False,
 )

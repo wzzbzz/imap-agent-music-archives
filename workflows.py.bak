@@ -232,11 +232,6 @@ EVEN_MORE_CAKE_WORKFLOW = WorkflowConfig(
 
 
 # Workflow Registry
-WORKFLOWS = {
-    "sonic_twist": SONIC_TWIST_WORKFLOW,
-    "off_the_grid": OFF_THE_GRID_WORKFLOW,
-    "even_more_cake": EVEN_MORE_CAKE_WORKFLOW,
-}
 
 
 def get_workflow(name: str) -> WorkflowConfig:
