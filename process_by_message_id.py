@@ -13,19 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from workflows import get_workflow
 from email_processor import EmailProcessor
 from imap_utils import fetch_emails
-from utils import clean_text, sanitize_for_json, slugify_filename
-from attachment_handlers import get_handler
-
-
-def get_next_track_number(metadata_file: Path) -> int:
-    """Get the next track number from existing metadata."""
-    if not metadata_file.exists():
-        return 1
-    
-    with open(metadata_file, 'r') as f:
-        metadata = json.load(f)
-    
-    return len(metadata.get('tracks', [])) + 1
+from utils import clean_text, sanitize_for_json
 
 
 def process_by_message_id(workflow_name: str, message_id: str):
@@ -34,8 +22,6 @@ def process_by_message_id(workflow_name: str, message_id: str):
     Handles single-release mode automatically.
     """
     workflow = get_workflow(workflow_name)
-    base_dir = Path(workflow.base_dir)
-    base_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"🔍 Looking for email with Message-ID: {message_id}")
     
@@ -73,115 +59,111 @@ def process_by_message_id(workflow_name: str, message_id: str):
 
 
 def process_single_release_email(msg, workflow):
-    """Process an email for a single-release workflow."""
+    """
+    Process an email for a single-release workflow.
+    Generates LLM metadata for the new track(s), then appends to existing release.
+    """
+    from llm_metadata import generate_metadata_for_release
+    
     base_dir = Path(workflow.base_dir)
     release_dir = base_dir / workflow.single_release_name
     audio_dir = release_dir / "audio"
     images_dir = release_dir / "images"
-    metadata_file = release_dir / "metadata.json"
+    main_metadata_file = release_dir / "metadata.json"
     
-    # Create directories
-    audio_dir.mkdir(parents=True, exist_ok=True)
-    images_dir.mkdir(parents=True, exist_ok=True)
+    # Create temporary directory for this new email
+    temp_dir = release_dir / f"_temp_{msg.uid}"
+    temp_audio_dir = temp_dir / "audio"
+    temp_images_dir = temp_dir / "images"
+    temp_audio_dir.mkdir(parents=True, exist_ok=True)
+    temp_images_dir.mkdir(parents=True, exist_ok=True)
     
-    # Process attachments
+    # Process attachments into temp directory
+    processor = EmailProcessor(workflow)
     attachment_metadata = []
     extracted_text = {}
     
     for att in msg.attachments:
-        result = process_attachment(att, release_dir, extracted_text, workflow)
+        result = processor._process_attachment(att, temp_dir, extracted_text)
         if result:
             attachment_metadata.extend(result)
     
-    # Load or create metadata
-    if metadata_file.exists():
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
-        print(f"📝 Appending to existing release with {len(metadata.get('tracks', []))} tracks")
+    # Save raw email data
+    raw_data = {
+        "uid": msg.uid,
+        "message_id": msg.obj.get('Message-ID'),
+        "subject": clean_text(msg.subject),
+        "body": sanitize_for_json(msg.text or msg.html),
+        "date": str(msg.date),
+        "from": msg.from_,
+        "to": msg.to,
+        "attachments": attachment_metadata,
+        **extracted_text
+    }
+    
+    temp_raw_file = temp_dir / "raw.json"
+    with open(temp_raw_file, 'w') as f:
+        json.dump(raw_data, f, indent=4)
+    
+    # Generate LLM metadata for this email
+    print(f"🧠 Generating track metadata with {workflow.metadata_llm_provider.upper()}...")
+    
+    success = generate_metadata_for_release(
+        release_dir=temp_dir,
+        provider=workflow.metadata_llm_provider,
+        schema=workflow.metadata_schema
+    )
+    
+    if not success:
+        print(f"⚠️  Metadata generation failed")
+        import shutil
+        shutil.rmtree(temp_dir)
+        return
+    
+    # Add durations to new tracks
+    processor._add_track_durations(temp_dir)
+    
+    # Load the newly generated metadata
+    temp_metadata_file = temp_dir / "metadata.json"
+    with open(temp_metadata_file, 'r') as f:
+        new_metadata = json.load(f)
+    
+    # Load or create main metadata
+    if main_metadata_file.exists():
+        with open(main_metadata_file, 'r') as f:
+            main_metadata = json.load(f)
+        print(f"📝 Appending to existing release with {len(main_metadata.get('tracks', []))} tracks")
     else:
-        metadata = {
+        main_metadata = {
             "release_number": 1,
             "tracks": []
         }
         print(f"📝 Creating new release")
     
-    # Add new track(s)
-    for att_meta in attachment_metadata:
-        if att_meta.get('slugified', '').endswith(('.mp3', '.m4a', '.wav')):
-            audio_path = audio_dir / att_meta['slugified']
-            duration = get_duration(audio_path)
-            
-            track = {
-                "track_num": len(metadata['tracks']) + 1,
-                "title": clean_text(msg.subject),
-                "credits": msg.from_,
-                "date_written": str(msg.date),
-                "lyrics": extracted_text.get('lyrics', ''),
-                "audio_file": att_meta['slugified'],
-                "track_image": None,
-                "duration": duration
-            }
-            
-            metadata['tracks'].append(track)
-            print(f"  ✓ Added track #{track['track_num']}: {track['title']}")
+    # Move files from temp to main directories
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save metadata
-    with open(metadata_file, 'w') as f:
-        json.dump(metadata, f, indent=4)
+    import shutil
+    for file in temp_audio_dir.iterdir():
+        shutil.move(str(file), str(audio_dir / file.name))
+    for file in temp_images_dir.iterdir():
+        shutil.move(str(file), str(images_dir / file.name))
     
-    print(f"✅ Release now has {len(metadata['tracks'])} total tracks")
-
-
-def process_attachment(att, release_dir, extracted_text, workflow):
-    """Process a single attachment."""
-    orig_name = clean_text(att.filename)
+    # Append new tracks with updated track numbers
+    for track in new_metadata.get('tracks', []):
+        track['track_num'] = len(main_metadata['tracks']) + 1
+        main_metadata['tracks'].append(track)
+        print(f"  ✓ Added track #{track['track_num']}: {track.get('title', 'Unknown')}")
     
-    # Determine target directory
-    if is_image(orig_name):
-        target_dir = release_dir / "images"
-    else:
-        target_dir = release_dir / "audio"
+    # Save updated main metadata
+    with open(main_metadata_file, 'w') as f:
+        json.dump(main_metadata, f, indent=4)
     
-    # Find matching processor
-    for processor_config in workflow.attachment_processors:
-        if matches_pattern(orig_name, processor_config.file_patterns):
-            handler = get_handler(processor_config.handler)
-            return handler(
-                attachment=att,
-                target_dir=target_dir,
-                extracted_text=extracted_text,
-                options=processor_config.options,
-                workflow=workflow
-            )
+    # Clean up temp directory
+    shutil.rmtree(temp_dir)
     
-    # No processor - save as-is
-    slugged_name = slugify_filename(orig_name)
-    file_path = target_dir / slugged_name
-    with open(file_path, 'wb') as f:
-        f.write(att.payload)
-    return [{"original": orig_name, "slugified": slugged_name}]
-
-
-def is_image(filename: str) -> bool:
-    """Check if filename is an image."""
-    exts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']
-    return any(filename.lower().endswith(ext) for ext in exts)
-
-
-def matches_pattern(filename: str, patterns):
-    """Check if filename matches any pattern."""
-    import fnmatch
-    return any(fnmatch.fnmatch(filename.lower(), p.lower()) for p in patterns)
-
-
-def get_duration(audio_path: Path) -> int:
-    """Get audio duration in seconds."""
-    try:
-        from mutagen.mp3 import MP3
-        audio = MP3(str(audio_path))
-        return int(audio.info.length)
-    except:
-        return 0
+    print(f"✅ Release now has {len(main_metadata['tracks'])} total tracks")
 
 
 if __name__ == "__main__":
