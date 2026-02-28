@@ -25,7 +25,30 @@ def cmd_list_workflows(args):
 def cmd_run_workflow(args):
     """Run a specific workflow"""
     try:
-        process_workflow(args.workflow, force=args.force)
+        workflow = get_workflow(args.workflow)
+
+        # Validate --title for named_release workflows
+        if workflow.collection_type == "named_release" and not args.title:
+            print(f"❌ Workflow '{args.workflow}' requires --title")
+            sys.exit(1)
+
+        # Validate --path for non-IMAP sources
+        source = args.source or "imap"
+        if source != "imap" and not args.path:
+            print(f"❌ --source {source} requires --path")
+            sys.exit(1)
+
+        # Non-IMAP sources are stubbed
+        if source != "imap":
+            print(f"❌ Source '{source}' is not yet implemented")
+            sys.exit(1)
+
+        process_workflow(
+            args.workflow,
+            force=args.force,
+            title=args.title,
+            message_id=args.message_id,
+        )
     except ValueError as e:
         print(f"❌ {e}")
         sys.exit(1)
@@ -103,40 +126,55 @@ def cmd_check_status(args):
     try:
         workflow = get_workflow(args.workflow)
         base_dir = Path(workflow.base_dir)
-        
+
         if not base_dir.exists():
             print(f"❌ Directory does not exist: {base_dir}")
             sys.exit(1)
-        
-        # Find all issue/volume folders
-        folders = sorted([
-            d for d in base_dir.iterdir() 
-            if d.is_dir() and (d.name.startswith("Issue_") or d.name.startswith("Volume_"))
-        ])
-        
-        print(f"\n📊 Status for {workflow.name}:")
+
+        # Discover folders based on collection type
+        if workflow.collection_type == "bound_volume":
+            # Look for Issue_N or Volume_N folders
+            prefix = workflow.release_indicator + "_"
+            folders = sorted([
+                d for d in base_dir.iterdir()
+                if d.is_dir() and d.name.startswith(prefix)
+            ])
+        elif workflow.collection_type == "playlist":
+            # Single folder — the playlist itself
+            playlist_dir = base_dir / workflow.single_release_name
+            folders = [playlist_dir] if playlist_dir.exists() else []
+        elif workflow.collection_type == "named_release":
+            # Every subdirectory is a named release
+            folders = sorted([d for d in base_dir.iterdir() if d.is_dir()])
+        else:
+            folders = []
+
+        print(f"\n📊 Status for {workflow.name} ({workflow.collection_type}):")
         print(f"Base: {base_dir}\n")
-        print(f"{'Folder':<20} {'raw.json':<12} {'Audio Files':<12} {'Status'}")
-        print("-" * 70)
-        
+        print(f"{'Folder':<30} {'raw.json':<12} {'Audio Files':<12} {'Status'}")
+        print("-" * 75)
+
         for folder in folders:
             raw_json = folder / "raw.json"
             audio_dir = folder / "audio"
-            
+
             has_json = "✅" if raw_json.exists() else "❌"
-            
+
             if audio_dir.exists():
                 audio_files = list(audio_dir.glob("*.mp3")) + list(audio_dir.glob("*.m4a"))
                 audio_count = len(audio_files)
             else:
                 audio_count = 0
-            
+
             status = "Complete" if raw_json.exists() and audio_count > 0 else "Incomplete"
-            
-            print(f"{folder.name:<20} {has_json:<12} {audio_count:<12} {status}")
-        
+
+            print(f"{folder.name:<30} {has_json:<12} {audio_count:<12} {status}")
+
+        if not folders:
+            print("  (no releases found)")
+
         print()
-        
+
     except ValueError as e:
         print(f"❌ {e}")
         sys.exit(1)
@@ -178,14 +216,23 @@ def main():
     run_parser = subparsers.add_parser("run", help="Run a workflow")
     run_parser.add_argument("workflow", help="Workflow name")
     run_parser.add_argument("--force", action="store_true", help="Reprocess existing emails")
+    run_parser.add_argument("--source", choices=["imap", "filesystem", "dropbox", "google_drive"],
+                            help="Ingestion source (default: imap)")
+    run_parser.add_argument("--path", help="Source path (required for non-IMAP sources)")
+    run_parser.add_argument("--title", help="Release title (required for nice_threads)")
+    run_parser.add_argument("--message-id", dest="message_id", help="Filter by Message-ID")
     run_parser.set_defaults(func=cmd_run_workflow)
     
     # Process single email
     single_parser = subparsers.add_parser("process-one", help="Process a single email")
     single_parser.add_argument("workflow", help="Workflow name")
     single_parser.add_argument("--uid", help="Email UID")
-    single_parser.add_argument("--message-id", help="Email Message-ID")
+    single_parser.add_argument("--message-id", dest="message_id", help="Email Message-ID")
     single_parser.add_argument("--force", action="store_true", help="Reprocess if exists")
+    single_parser.add_argument("--source", choices=["imap", "filesystem", "dropbox", "google_drive"],
+                               help="Ingestion source (default: imap)")
+    single_parser.add_argument("--path", help="Source path (required for non-IMAP sources)")
+    single_parser.add_argument("--title", help="Release title (required for nice_threads)")
     single_parser.set_defaults(func=cmd_process_single)
     
     # Check status

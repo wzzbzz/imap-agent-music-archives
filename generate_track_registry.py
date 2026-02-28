@@ -6,33 +6,44 @@ Creates tracks.json with canonical track data.
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List
+
+sys.path.insert(0, str(Path(__file__).parent.resolve()))
+from workflows import WORKFLOWS
 
 # Base path for archives - defaults to script directory
 BASE_PATH = Path(__file__).parent.resolve()
 
-# Collection configurations
-COLLECTIONS = [
-    {
-        "id": "sonic_twist",
-        "folder": "archives/sonic_twist",
-        "release_pattern": "Issue_",
-        "release_type": "Issue"
-    },
-    {
-        "id": "even_more_cake",
-        "folder": "archives/even_more_cake",
-        "release_pattern": "Volume_",
-        "release_type": "Volume"
-    },
-    {
-        "id": "off_the_grid",
-        "folder": "archives/off_the_grid",
-        "release_pattern": "Volume_",
-        "release_type": "Volume"
-    }
-]
+
+def build_collections() -> List[Dict]:
+    """Derive collection configs from the workflow registry."""
+    collections = []
+    for workflow in WORKFLOWS.values():
+        if workflow.collection_type == "bound_volume":
+            release_type = workflow.release_indicator
+            release_pattern = f"{release_type}_"
+        elif workflow.collection_type == "playlist":
+            release_type = "Playlist"
+            release_pattern = workflow.single_release_name
+        elif workflow.collection_type == "named_release":
+            release_type = "Release"
+            release_pattern = None
+        else:
+            continue
+
+        collections.append({
+            "id": workflow.name,
+            "folder": workflow.base_dir,
+            "release_pattern": release_pattern,
+            "release_type": release_type,
+            "collection_type": workflow.collection_type,
+        })
+    return collections
+
+
+COLLECTIONS = build_collections()
 
 
 def generate_track_id(audio_file: str, collection_id: str) -> str:
@@ -64,11 +75,16 @@ def scan_collection(collection: Dict, base_path: Path = BASE_PATH) -> Dict[str, 
         print(f"⚠️  Collection not found: {collection_path}")
         return tracks
     
-    # Find all release folders
-    release_folders = [
-        f for f in collection_path.iterdir() 
-        if f.is_dir() and f.name.startswith(collection["release_pattern"])
-    ]
+    # Find all release folders based on collection type
+    if collection["collection_type"] == "named_release":
+        release_folders = sorted([f for f in collection_path.iterdir() if f.is_dir()])
+    elif collection["release_pattern"]:
+        release_folders = sorted([
+            f for f in collection_path.iterdir()
+            if f.is_dir() and f.name.startswith(collection["release_pattern"])
+        ])
+    else:
+        release_folders = []
     
     print(f"\n📁 Scanning {collection['id']}: {len(release_folders)} releases")
     

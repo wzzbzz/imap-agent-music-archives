@@ -63,11 +63,12 @@ class EmailProcessor:
         
         return latest_date
         
-    def process_all_emails(self, force: bool = False):
+    def process_all_emails(self, force: bool = False, title: Optional[str] = None,
+                           message_id: Optional[str] = None):
         """Fetch and process all emails matching workflow criteria"""
         print(f"🚀 Starting workflow: {self.workflow.name}")
         print(f"📂 Base directory: {self.base_dir}")
-        
+
         # Auto-detect resume point if no after_date is set
         if not self.workflow.after_date:
             latest_date = self._get_latest_archived_date()
@@ -79,59 +80,81 @@ class EmailProcessor:
                 print(f"📭 No existing archives found - fetching all emails")
         else:
             print(f"📅 Using configured after_date: {self.workflow.after_date}")
-        
+
         imap_args = self.workflow.to_imap_args()
-        
+
+        # Override message_id if passed at runtime (e.g. nice_threads, mixed_nuts)
+        if message_id:
+            imap_args["message_id"] = message_id
+
         for msg in fetch_emails(imap_args):
             if not force and self._is_already_processed(msg.uid):
                 print(f"⏭️  UID {msg.uid} already processed. Skipping.")
                 continue
-                
+
             try:
-                self.process_single_email(msg, force=force)
+                self.process_single_email(msg, force=force, title=title)
                 self._mark_processed(msg.uid)
             except Exception as e:
                 print(f"❌ Error processing UID {msg.uid}: {e}")
     
-    def process_single_email(self, msg, force: bool = False):
+    def process_single_email(self, msg, force: bool = False, title: Optional[str] = None):
         """Process a single email message"""
         print(f"\n📥 Processing UID {msg.uid}: {msg.subject}")
-        
-        # Extract release number
-        clean_subject = clean_text(msg.subject)
-        release_number = self.workflow.extract_release_number(clean_subject)
-        
-        if not str(release_number).isdigit():
-            print(f"❌ Could not extract valid release number from: {clean_subject}")
-            return
-        
-        # Setup directories
-        issue_dir = self.base_dir / self.workflow.get_folder_name(release_number)
-        audio_dir = issue_dir / "audio"
 
+        clean_subject = clean_text(msg.subject)
+        collection_type = self.workflow.collection_type
+
+        # Resolve the release folder based on collection type
+        if collection_type == "bound_volume":
+            release_number = self.workflow.extract_release_number(clean_subject)
+            if not str(release_number).isdigit():
+                print(f"❌ Could not extract valid release number from: {clean_subject}")
+                return
+            folder_name = self.workflow.get_folder_name(release_number)
+            release_label = f"{self.workflow.release_indicator} {release_number}"
+
+        elif collection_type == "playlist":
+            folder_name = self.workflow.single_release_name
+            release_label = folder_name
+
+        elif collection_type == "named_release":
+            if not title:
+                print(f"❌ Workflow '{self.workflow.name}' requires --title")
+                return
+            from utils import slugify_filename
+            folder_name = slugify_filename(title)
+            release_label = title
+
+        else:
+            print(f"❌ Unknown collection_type: {collection_type}")
+            return
+
+        # Setup directories
+        issue_dir = self.base_dir / folder_name
+        audio_dir = issue_dir / "audio"
         images_dir = issue_dir / "images"
-        
+
         # Check if already exists
         if not force and issue_dir.exists():
             raw_json = issue_dir / "raw.json"
             if raw_json.exists() and not self.workflow.merge_fragments:
-                print(f"⏭️  {self.workflow.release_indicator} {release_number} already exists. Skipping.")
+                print(f"⏭️  {release_label} already exists. Skipping.")
                 return
-        
 
         # If force reprocessing, clean out and recreate audio directory
-        print (len(msg.attachments))
-        
-        if force and audio_dir.exists() and len(msg.attachments)>0:
+        print(len(msg.attachments))
+
+        if force and audio_dir.exists() and len(msg.attachments) > 0:
             print(f"🗑️  Removing existing audio directory for clean reprocessing...")
             import shutil
             shutil.rmtree(audio_dir)
-        
+
         # Create necessary directories
         audio_dir.mkdir(parents=True, exist_ok=True)
         images_dir.mkdir(parents=True, exist_ok=True)
-        
-        print(f"📄 Processing {self.workflow.release_indicator} {release_number}...")
+
+        print(f"📄 Processing {release_label}...")
         
         # Process attachments
         attachment_metadata = []
@@ -154,8 +177,8 @@ class EmailProcessor:
         # Generate structured metadata using LLM if enabled
         if self.workflow.generate_metadata:
             self._generate_llm_metadata(issue_dir)
-                    
-        print(f"✅ {self.workflow.release_indicator} {release_number} complete!")
+
+        print(f"✅ {release_label} complete!")
     
     def _process_attachment(self, att, issue_dir: Path, extracted_text: Dict) -> List[Dict]:
         """Process a single attachment according to workflow config"""
@@ -351,13 +374,14 @@ class EmailProcessor:
         mark_as_downloaded(uid, str(self.registry_path))
 
 
-def process_workflow(workflow_name: str, force: bool = False):
+def process_workflow(workflow_name: str, force: bool = False,
+                     title: Optional[str] = None, message_id: Optional[str] = None):
     """Convenience function to process a workflow by name"""
     from workflows import get_workflow
-    
+
     workflow = get_workflow(workflow_name)
     processor = EmailProcessor(workflow)
-    processor.process_all_emails(force=force)
+    processor.process_all_emails(force=force, title=title, message_id=message_id)
 
 
 if __name__ == "__main__":

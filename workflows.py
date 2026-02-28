@@ -10,7 +10,7 @@ Each workflow defines:
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Callable, Optional
+from typing import List, Dict, Callable, Optional, Literal
 import re
 
 
@@ -30,6 +30,7 @@ class WorkflowConfig:
     # Identity
     name: str
     description: str
+    collection_type: Literal["bound_volume", "playlist", "named_release"]
     
     # Storage
     base_dir: str
@@ -113,6 +114,7 @@ class WorkflowConfig:
 SONIC_TWIST_WORKFLOW = WorkflowConfig(
     name="sonic_twist",
     description="Sonic Twist newsletter archive with audio tracks and lyrics",
+    collection_type="bound_volume",
     base_dir="archives/sonic_twist",
     folder_pattern="Issue_{number}",
     
@@ -160,6 +162,7 @@ SONIC_TWIST_WORKFLOW = WorkflowConfig(
 OFF_THE_GRID_WORKFLOW = WorkflowConfig(
     name="off_the_grid",
     description="Off the Grid radio show archives",
+    collection_type="bound_volume",
     base_dir="archives/off_the_grid",
     folder_pattern="Volume_{number}",
     
@@ -199,6 +202,7 @@ OFF_THE_GRID_WORKFLOW = WorkflowConfig(
 EVEN_MORE_CAKE_WORKFLOW = WorkflowConfig(
     name="even_more_cake",
     description="Even More Cake radio show archives",
+    collection_type="bound_volume",
     base_dir="archives/even_more_cake",
     folder_pattern="Volume_{number}",
     
@@ -253,6 +257,7 @@ def list_workflows() -> List[str]:
 MIXED_NUTS_WORKFLOW = WorkflowConfig(
     name="mixed_nuts",
     description="One-off tracks - manually curated by Message-ID",
+    collection_type="playlist",
     base_dir="archives/mixed_nuts",
     folder_pattern="Track_{number}",
     
@@ -299,6 +304,46 @@ MIXED_NUTS_WORKFLOW = WorkflowConfig(
     merge_fragments=False,
 )
 
+NICE_THREADS_WORKFLOW = WorkflowConfig(
+    name="nice_threads",
+    description="Thematic, dramatic trips through the Puppetscape",
+    collection_type="named_release",
+    base_dir="archives/nice_threads",
+    folder_pattern="{title}",  # User-supplied title, no issue number
+    
+    sender=None,         # Curated by Message-ID, no sender filter needed
+    subject_filter=None, # Curated by Message-ID, no subject filter needed
+    
+    attachment_processors=[
+        AttachmentProcessor(
+            name="zip_extractor",
+            file_patterns=["*.zip"],
+            handler="process_zip_attachment",
+        ),
+        AttachmentProcessor(
+            name="audio_normalizer",
+            file_patterns=["*.mp3", "*.m4a", "*.wav"],
+            handler="normalize_audio",
+            options={"target_lufs": -16.0, "bitrate": "320k"}
+        ),
+        AttachmentProcessor(
+            name="image_saver",
+            file_patterns=["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
+            handler="save_image",
+            options={}
+        ),
+        AttachmentProcessor(
+            name="lyrics_extractor",
+            file_patterns=["*.docx"],
+            handler="extract_docx_text",
+            options={"field_name": "lyrics"}
+        ),
+    ],
+    
+    normalize_audio=True,
+    audio_output_format="mp3",
+    merge_fragments=True,
+)
 
 # Workflow Registry
 WORKFLOWS = {
@@ -306,4 +351,5 @@ WORKFLOWS = {
     "off_the_grid": OFF_THE_GRID_WORKFLOW,
     "even_more_cake": EVEN_MORE_CAKE_WORKFLOW,
     "mixed_nuts": MIXED_NUTS_WORKFLOW,
+    "nice_threads": NICE_THREADS_WORKFLOW,
 }
