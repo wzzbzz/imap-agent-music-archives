@@ -243,8 +243,12 @@ class EmailProcessor:
             "from": msg.from_,
             "to": msg.to,
             "attachments": attachment_metadata,
-            **extracted_text  # Add any extracted lyrics, notes, etc.
+            **extracted_text
         }
+
+        # Preserve the human-readable title for named_release collections
+        if self.workflow.collection_type == "named_release" and title:
+            new_data["release_title"] = title
         
         # Merge or create
         if self.workflow.merge_fragments and raw_json_path.exists():

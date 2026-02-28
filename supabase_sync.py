@@ -84,7 +84,8 @@ def generate_track_id(audio_file: str, collection_id: str) -> str:
 def sync_release_to_supabase(
     collection_id: str,
     release_dir: Path,
-    release_type: str = "Issue"
+    release_type: str = "Issue",
+    collection_type: str = "bound_volume"
 ) -> bool:
     """
     Sync a single release to Supabase.
@@ -118,6 +119,24 @@ def sync_release_to_supabase(
                 release_date = raw_data.get('date')
         
         release_num = metadata.get('issue_number') or metadata.get('release_number')
+
+        # For named releases, auto-increment release_number and read title from raw.json
+        if collection_type == "named_release":
+            result = supabase.table('releases') \
+                .select('release_number') \
+                .eq('collection_id', collection_id) \
+                .order('release_number', desc=True) \
+                .limit(1) \
+                .execute()
+            max_num = result.data[0]['release_number'] if result.data else 0
+            release_num = max_num + 1
+
+            # Read human-readable title from raw.json
+            release_title = None
+            if raw_file.exists():
+                with open(raw_file, 'r', encoding='utf-8') as f:
+                    raw_data_for_title = json.load(f)
+                    release_title = raw_data_for_title.get('release_title') or release_dir.name
         release_image = metadata.get('issue_image') or metadata.get('release_image')
         
         # Build release image path
@@ -138,6 +157,9 @@ def sync_release_to_supabase(
             'track_count': len(tracks_data),
             'total_duration': total_duration
         }
+
+        if collection_type == "named_release":
+            db_release['release_title'] = release_title
         
         result = supabase.table('releases').upsert(
             db_release,
@@ -274,7 +296,7 @@ if __name__ == "__main__":
             print(f"Release directory not found: {release_dir}")
             exit(1)
         print(f"📤 Syncing {args.release} to Supabase...")
-        sync_release_to_supabase(args.collection_id, release_dir, release_type)
+        sync_release_to_supabase(args.collection_id, release_dir, release_type, workflow.collection_type)
 
     elif args.all:
         if workflow.collection_type == "named_release":
@@ -289,7 +311,7 @@ if __name__ == "__main__":
 
         print(f"📤 Syncing {len(release_folders)} releases to Supabase...")
         for release_dir in release_folders:
-            sync_release_to_supabase(args.collection_id, release_dir, release_type)
+            sync_release_to_supabase(args.collection_id, release_dir, release_type, workflow.collection_type)
         print(f"\n✅ Sync complete!")
 
     else:
