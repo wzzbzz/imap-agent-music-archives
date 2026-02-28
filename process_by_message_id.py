@@ -181,8 +181,12 @@ if __name__ == "__main__":
     
     if success:
         workflow = get_workflow(args.workflow)
-        if workflow.single_release_mode:
+        if workflow.collection_type in ("playlist", "named_release"):
+            if workflow.collection_type == "playlist":
+                release_arg = f"--release {workflow.single_release_name}"
+            else:
+                release_arg = "--all"
             print(f"\n💡 Sync to Supabase:")
-            print(f"   python supabase_sync.py {args.workflow} --release {workflow.single_release_name}")
+            print(f"   python supabase_sync.py {args.workflow} {release_arg}")
     
     sys.exit(0 if success else 1)

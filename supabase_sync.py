@@ -6,13 +6,60 @@ Replaces the need for generate_manifests.py and generate_track_registry.py
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Optional
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
+sys.path.insert(0, str(Path(__file__).parent.resolve()))
+from workflows import WORKFLOWS
+
 # Load environment variables
 load_dotenv()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in environment")
+
+# Initialize Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Display metadata per collection (presentation data not stored in WorkflowConfig)
+COLLECTION_DISPLAY = {
+    "sonic_twist": {
+        "name": "Sonic Twist",
+        "artist": "Jackie Puppet Band",
+        "color": "#3b82f6",
+        "description": "Sonic Twist newsletter archive with audio tracks and lyrics"
+    },
+    "even_more_cake": {
+        "name": "Even More Cake",
+        "artist": "Jackie Puppet Band",
+        "color": "#ec4899",
+        "description": "Even More Cake radio show archives"
+    },
+    "off_the_grid": {
+        "name": "Off the Grid",
+        "artist": "Jackie Puppet Band",
+        "color": "#10b981",
+        "description": "Off the Grid radio show archives"
+    },
+    "mixed_nuts": {
+        "name": "Mixed Nuts",
+        "artist": "Jackie Puppet Band",
+        "color": "#f59e0b",
+        "description": "One-off tracks and miscellaneous recordings"
+    },
+    "nice_threads": {
+        "name": "Nice Threads",
+        "artist": "Jackie Puppet Band",
+        "color": "#facc15",
+        "description": "Thematic, dramatic trips through the Puppetscape"
+    },
+}
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
@@ -145,132 +192,106 @@ def sync_release_to_supabase(
 
 
 def ensure_collection_exists(collection_id: str, collection_config: Dict) -> bool:
-    """
-    Ensure a collection exists in Supabase.
-    
-    Args:
-        collection_id: The collection ID
-        collection_config: Dict with name, artist, release_type, color, description
-    
-    Returns:
-        True if successful
-    """
+    """Ensure a collection exists in Supabase."""
     try:
+        workflow = WORKFLOWS[collection_id]
+        display = COLLECTION_DISPLAY[collection_id]
+
+        if workflow.collection_type == "bound_volume":
+            release_type = workflow.release_indicator
+        elif workflow.collection_type == "playlist":
+            release_type = "Track"
+        elif workflow.collection_type == "named_release":
+            release_type = "Release"
+        else:
+            release_type = "Release"
+
         db_collection = {
             'id': collection_id,
-            'name': collection_config['name'],
-            'artist': collection_config['artist'],
-            'release_type': collection_config['release_type'],
-            'color': collection_config['color'],
-            'description': collection_config.get('description', ''),
+            'name': display['name'],
+            'artist': display['artist'],
+            'release_type': release_type,
+            'color': display['color'],
+            'description': display.get('description', ''),
             'active': True,
             'is_virtual': False
         }
-        
+
         supabase.table('collections').upsert(db_collection).execute()
         return True
-        
+
     except Exception as e:
         print(f"❌ Error ensuring collection exists: {e}")
         return False
 
 
-# Collection configurations (same as in generate_manifests.py)
-COLLECTIONS = {
-    "sonic_twist": {
-        "name": "Sonic Twist",
-        "artist": "Jackie Puppet Band",
-        "release_type": "Issue",
-        "color": "#3b82f6",
-        "description": "Sonic Twist newsletter archive with audio tracks and lyrics"
-    },
-    "even_more_cake": {
-        "name": "Even More Cake",
-        "artist": "Jackie Puppet Band",
-        "release_type": "Volume",
-        "color": "#ec4899",
-        "description": "Even More Cake radio show archives"
-    },
-    "off_the_grid": {
-        "name": "Off the Grid",
-        "artist": "Jackie Puppet Band",
-        "release_type": "Volume",
-        "color": "#10b981",
-        "description": "Off the Grid radio show archives"
-    },
-     "mixed_nuts": {
-        "name": "Mixed Nuts",
-        "artist": "Jackie Puppet Band",
-        "release_type": "Track",
-        "color": "#f59e0b",
-        "description": "One-off tracks and miscellaneous recordings"
-    },
-}
-
-
 if __name__ == "__main__":
-    """CLI for manual syncing"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Sync releases to Supabase")
-    parser.add_argument('collection_id', help='Collection ID (sonic_twist, etc.)')
+    parser.add_argument('collection_id', help=f"Collection ID: {list(WORKFLOWS.keys())}")
     parser.add_argument('--release', help='Specific release folder name (e.g., Issue_23)')
     parser.add_argument('--all', action='store_true', help='Sync all releases in collection')
-    
+
     args = parser.parse_args()
-    
-    if args.collection_id not in COLLECTIONS:
+
+    if args.collection_id not in WORKFLOWS:
         print(f"Unknown collection: {args.collection_id}")
-        print(f"Available: {list(COLLECTIONS.keys())}")
+        print(f"Available: {list(WORKFLOWS.keys())}")
         exit(1)
-    
-    collection_config = COLLECTIONS[args.collection_id]
-    release_type = collection_config['release_type']
-    
-    # Ensure collection exists
-    ensure_collection_exists(args.collection_id, collection_config)
-    
-    base_path = Path(__file__).parent / "archives" / args.collection_id
-    
+
+    if args.collection_id not in COLLECTION_DISPLAY:
+        print(f"❌ No display config for '{args.collection_id}' — add it to COLLECTION_DISPLAY")
+        exit(1)
+
+    workflow = WORKFLOWS[args.collection_id]
+
+    if workflow.collection_type == "bound_volume":
+        release_type = workflow.release_indicator
+        release_pattern = f"{release_type}_"
+    elif workflow.collection_type == "playlist":
+        release_type = "Track"
+        release_pattern = workflow.single_release_name
+    elif workflow.collection_type == "named_release":
+        release_type = "Release"
+        release_pattern = None
+    else:
+        release_type = "Release"
+        release_pattern = None
+
+    # Ensure collection exists in Supabase
+    ensure_collection_exists(args.collection_id, COLLECTION_DISPLAY[args.collection_id])
+
+    base_path = Path(__file__).parent / workflow.base_dir
+
     if not base_path.exists():
         print(f"Collection directory not found: {base_path}")
         exit(1)
-    
+
     if args.release:
-        # Sync single release
         release_dir = base_path / args.release
         if not release_dir.exists():
             print(f"Release directory not found: {release_dir}")
             exit(1)
-        
         print(f"📤 Syncing {args.release} to Supabase...")
         sync_release_to_supabase(args.collection_id, release_dir, release_type)
-    
+
     elif args.all:
-        # Sync all releases
-        release_pattern = f"{release_type}_"
-        release_folders = sorted([
-            f for f in base_path.iterdir()
-            if f.is_dir() and f.name.startswith(release_pattern)
-        ])
-        
+        if workflow.collection_type == "named_release":
+            release_folders = sorted([f for f in base_path.iterdir() if f.is_dir()])
+        elif release_pattern:
+            release_folders = sorted([
+                f for f in base_path.iterdir()
+                if f.is_dir() and f.name.startswith(release_pattern)
+            ])
+        else:
+            release_folders = []
+
         print(f"📤 Syncing {len(release_folders)} releases to Supabase...")
-        
         for release_dir in release_folders:
             sync_release_to_supabase(args.collection_id, release_dir, release_type)
-        
         print(f"\n✅ Sync complete!")
-    
+
     else:
         print("Specify either --release FOLDER or --all")
         exit(1)
-# Mixed Nuts collection added manually - insert this into COLLECTIONS dict above
-mixed_nuts_entry = {
-    "mixed_nuts": {
-        "name": "Mixed Nuts",
-        "artist": "Jackie Puppet Band",
-        "release_type": "Track",
-        "color": "#f59e0b",
-        "description": "One-off tracks and miscellaneous recordings"
-    }
-}
