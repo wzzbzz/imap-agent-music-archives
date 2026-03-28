@@ -345,6 +345,48 @@ NICE_THREADS_WORKFLOW = WorkflowConfig(
     merge_fragments=True,
 )
 
+
+SNOOPARONI_FILES_WORKFLOW = WorkflowConfig(
+    name="snooparoni_files",
+    description="The Snooparoni Files — Detective Snooparoni and the cases that define him",
+    collection_type="named_release",
+    base_dir="archives/snooparoni_files",
+    folder_pattern="{title}",  # User-supplied title per release, e.g. "the_snooparoni_files"
+
+    sender=None,         # Curated by Message-ID
+    subject_filter=None, # Curated by Message-ID
+
+    attachment_processors=[
+        AttachmentProcessor(
+            name="zip_extractor",
+            file_patterns=["*.zip"],
+            handler="process_zip_attachment",
+        ),
+        AttachmentProcessor(
+            name="audio_normalizer",
+            file_patterns=["*.mp3", "*.m4a", "*.wav"],
+            handler="normalize_audio",
+            options={"target_lufs": -16.0, "bitrate": "320k"}
+        ),
+        AttachmentProcessor(
+            name="image_saver",
+            file_patterns=["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
+            handler="save_image",
+            options={}
+        ),
+        AttachmentProcessor(
+            name="lyrics_extractor",
+            file_patterns=["*.docx"],
+            handler="extract_docx_text",
+            options={"field_name": "lyrics"}
+        ),
+    ],
+
+    normalize_audio=True,
+    audio_output_format="mp3",
+    merge_fragments=True,  # Multiple emails may contribute to one release
+)
+
 # Workflow Registry
 WORKFLOWS = {
     "sonic_twist": SONIC_TWIST_WORKFLOW,
@@ -352,4 +394,5 @@ WORKFLOWS = {
     "even_more_cake": EVEN_MORE_CAKE_WORKFLOW,
     "mixed_nuts": MIXED_NUTS_WORKFLOW,
     "nice_threads": NICE_THREADS_WORKFLOW,
+    "snooparoni_files": SNOOPARONI_FILES_WORKFLOW,
 }

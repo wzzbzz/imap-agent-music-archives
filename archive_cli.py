@@ -108,7 +108,7 @@ def cmd_process_single(args):
         
         found = False
         for msg in fetch_emails(imap_args):
-            processor.process_single_email(msg, force=args.force)
+            processor.process_single_email(msg, force=args.force, title=args.title)
             found = True
             break
         

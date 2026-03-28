@@ -171,7 +171,8 @@ class EmailProcessor:
             msg=msg,
             clean_subject=clean_subject,
             attachment_metadata=attachment_metadata,
-            extracted_text=extracted_text
+            extracted_text=extracted_text,
+            title=title
         )
         
         # Generate structured metadata using LLM if enabled
@@ -228,8 +229,9 @@ class EmailProcessor:
         filename_lower = filename.lower()
         return any(fnmatch.fnmatch(filename_lower, pattern.lower()) for pattern in patterns)
     
-    def _save_metadata(self, issue_dir: Path, msg, clean_subject: str, 
-                      attachment_metadata: List[Dict], extracted_text: Dict):
+    def _save_metadata(self, issue_dir: Path, msg, clean_subject: str,
+                      attachment_metadata: List[Dict], extracted_text: Dict,
+                      title: Optional[str] = None):
         """Save or merge email metadata to raw.json"""
         raw_json_path = issue_dir / "raw.json"
         

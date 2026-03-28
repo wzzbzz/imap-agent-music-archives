@@ -59,6 +59,12 @@ COLLECTION_DISPLAY = {
         "color": "#facc15",
         "description": "Thematic, dramatic trips through the Puppetscape"
     },
+    "snooparoni_files": {
+        "name": "The Snooparoni Files",
+        "artist": "Jackie Puppet Band",
+        "color": "#a855f7",
+        "description": "Detective Snooparoni and the cases that define him"
+    },
 }
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
