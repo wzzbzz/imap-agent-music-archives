@@ -260,6 +260,7 @@ if __name__ == "__main__":
     parser.add_argument('collection_id', help=f"Collection ID: {list(WORKFLOWS.keys())}")
     parser.add_argument('--release', help='Specific release folder name (e.g., Issue_23)')
     parser.add_argument('--all', action='store_true', help='Sync all releases in collection')
+    parser.add_argument('--replace', action='store_true', help='Delete existing data for this collection before syncing')
 
     args = parser.parse_args()
 
@@ -289,6 +290,18 @@ if __name__ == "__main__":
 
     # Ensure collection exists in Supabase
     ensure_collection_exists(args.collection_id, COLLECTION_DISPLAY[args.collection_id])
+
+    # Replace: delete existing tracks and releases for this collection
+    if args.replace:
+        print(f"🗑️  Replacing existing data for '{args.collection_id}'...")
+        try:
+            # Delete tracks for this collection
+            supabase.table('tracks').delete().eq('collection_id', args.collection_id).execute()
+            # Delete releases for this collection
+            supabase.table('releases').delete().eq('collection_id', args.collection_id).execute()
+            print("✅ Existing data deleted")
+        except Exception as e:
+            print(f"⚠️  Error deleting existing data: {e}")
 
     base_path = Path(__file__).parent / workflow.base_dir
 

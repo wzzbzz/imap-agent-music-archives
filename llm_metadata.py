@@ -146,12 +146,13 @@ class MetadataGenerator:
 
 Respond with valid JSON only. Follow the schema exactly.
 
-IMPORTANT NOTES:
-- Numbers in filenames do NOT indicate track order - use the order from the message body
+CRITICAL INSTRUCTIONS:
+- You MUST create a track entry for EVERY audio file in the attachments list
+- Do NOT skip any audio files - all must appear in the tracks array
 - Use the "slugified" filename from attachments (the processed version)
 - Escape all special characters properly in JSON
-- the FIRST image is the release image.
-- all subsequent images should be assumed to be the track images in order.
+- The FIRST image is the release image
+- All subsequent images are track images in attachment order
 
 SUBJECT: {raw_data.get('subject', 'Unknown')}
 
