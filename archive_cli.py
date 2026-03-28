@@ -196,6 +196,56 @@ def cmd_remove_uid(args):
         sys.exit(1)
 
 
+def cmd_process_list(args):
+    """Process a list of Message-IDs from a file"""
+    try:
+        workflow = get_workflow(args.workflow)
+    except ValueError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
+
+    # Validate --title for named_release workflows
+    if workflow.collection_type == "named_release" and not args.title:
+        print(f"❌ Workflow '{args.workflow}' requires --title")
+        sys.exit(1)
+
+    # Read Message-IDs from file
+    list_path = Path(args.list_file)
+    if not list_path.exists():
+        print(f"❌ File not found: {list_path}")
+        sys.exit(1)
+
+    with open(list_path, 'r') as f:
+        message_ids = [line.strip() for line in f if line.strip()]
+
+    print(f"📋 Found {len(message_ids)} Message-IDs in {list_path.name}")
+
+    # Process each Message-ID
+    from imap_utils import fetch_emails
+
+    for i, msg_id in enumerate(message_ids, 1):
+        print(f"\n[{i}/{len(message_ids)}] Processing: {msg_id[:60]}...")
+
+        try:
+            processor = EmailProcessor(workflow)
+            imap_args = workflow.to_imap_args()
+            imap_args["message_id"] = msg_id
+
+            found = False
+            for msg in fetch_emails(imap_args):
+                processor.process_single_email(msg, force=args.force, title=args.title)
+                found = True
+                break
+
+            if not found:
+                print(f"  ⚠️  Email not found")
+
+        except Exception as e:
+            print(f"  ❌ Error: {e}")
+
+    print(f"\n✅ Done — processed {len(message_ids)} Message-IDs")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Email Archiving System - Process emails with configurable workflows"
@@ -245,6 +295,14 @@ def main():
     remove_parser.add_argument("workflow", help="Workflow name")
     remove_parser.add_argument("uid", help="Email UID to remove")
     remove_parser.set_defaults(func=cmd_remove_uid)
+
+    # Process list of Message-IDs
+    list_parser = subparsers.add_parser("process-list", help="Process a list of Message-IDs from a file")
+    list_parser.add_argument("workflow", help="Workflow name")
+    list_parser.add_argument("list_file", help="File containing Message-IDs (one per line)")
+    list_parser.add_argument("--force", action="store_true", help="Reprocess if exists")
+    list_parser.add_argument("--title", help="Release title (required for named_release)")
+    list_parser.set_defaults(func=cmd_process_list)
     
     args = parser.parse_args()
     
