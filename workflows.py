@@ -387,6 +387,44 @@ SNOOPARONI_FILES_WORKFLOW = WorkflowConfig(
     merge_fragments=True,  # Multiple emails may contribute to one release
 )
 
+SMORES_WORKFLOW = WorkflowConfig(
+    name="smores",
+    description="S'Mores radio show archives",
+    collection_type="bound_volume",
+    base_dir="archives/smores",
+    folder_pattern="Volume_{number}",
+
+    sender="alvyhall@aol.com",
+    subject_filter=None,  # Curated by Message-ID
+
+    release_number_pattern=r'Volume\s*(\d+)',
+    release_indicator="Volume",
+
+    attachment_processors=[
+        AttachmentProcessor(
+            name="zip_extractor",
+            file_patterns=["*.zip"],
+            handler="process_zip_attachment",
+        ),
+        AttachmentProcessor(
+            name="audio_normalizer",
+            file_patterns=["*.mp3", "*.m4a", "*.wav"],
+            handler="normalize_audio",
+            options={"target_lufs": -16.0, "bitrate": "320k"}
+        ),
+        AttachmentProcessor(
+            name="image_saver",
+            file_patterns=["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
+            handler="save_image",
+            options={}
+        ),
+    ],
+
+    normalize_audio=True,
+    audio_output_format="mp3",
+    merge_fragments=False,
+)
+
 # Workflow Registry
 WORKFLOWS = {
     "sonic_twist": SONIC_TWIST_WORKFLOW,
@@ -395,4 +433,5 @@ WORKFLOWS = {
     "mixed_nuts": MIXED_NUTS_WORKFLOW,
     "nice_threads": NICE_THREADS_WORKFLOW,
     "snooparoni_files": SNOOPARONI_FILES_WORKFLOW,
+    "smores": SMORES_WORKFLOW,
 }

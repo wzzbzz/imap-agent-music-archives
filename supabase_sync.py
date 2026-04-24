@@ -65,6 +65,12 @@ COLLECTION_DISPLAY = {
         "color": "#a855f7",
         "description": "Detective Snooparoni and the cases that define him"
     },
+    "smores": {
+        "name": "S'Mores",
+        "artist": "Jackie Puppet Band",
+        "color": "#ff9f43",
+        "description": "S'Mores radio show archives"
+    },
 }
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
