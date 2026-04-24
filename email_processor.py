@@ -62,7 +62,32 @@ class EmailProcessor:
                 continue
         
         return latest_date
-        
+
+    def _get_next_release_number(self) -> str:
+        """Get the next sequential release number by scanning existing folders"""
+        import re
+
+        if not self.base_dir.exists():
+            return "1"
+
+        # Extract prefix (e.g., "Issue_", "Volume_")
+        prefix = self.workflow.release_indicator + "_"
+        max_num = 0
+
+        # Scan for existing release folders
+        for item in self.base_dir.iterdir():
+            if item.is_dir() and item.name.startswith(prefix):
+                # Extract the number part
+                num_str = item.name[len(prefix):]
+                try:
+                    num = int(num_str)
+                    max_num = max(max_num, num)
+                except ValueError:
+                    # Skip folders that don't have numeric suffix
+                    pass
+
+        return str(max_num + 1)
+
     def process_all_emails(self, force: bool = False, title: Optional[str] = None,
                            message_id: Optional[str] = None):
         """Fetch and process all emails matching workflow criteria"""
@@ -109,8 +134,9 @@ class EmailProcessor:
         if collection_type == "bound_volume":
             release_number = self.workflow.extract_release_number(clean_subject)
             if not str(release_number).isdigit():
-                print(f"❌ Could not extract valid release number from: {clean_subject}")
-                return
+                # Auto-generate next sequential number
+                release_number = self._get_next_release_number()
+                print(f"📊 No number found in subject, auto-generating: {release_number}")
             folder_name = self.workflow.get_folder_name(release_number)
             release_label = f"{self.workflow.release_indicator} {release_number}"
 
